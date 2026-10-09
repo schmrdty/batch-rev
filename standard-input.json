@@ -1,0 +1,30 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "src/BatchAllowanceRevoker.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// @title BatchAllowanceRevoker\n/// @notice Immutable, ownerless EIP-7702 delegate that can do exactly one thing:\n///         set ERC-20 allowances of the executing account to zero, in batch.\n/// @dev Designed to run ONLY as EIP-7702 delegated code of an EOA. Executed on the\n///      standalone deployment it is inert: `revokeMany` reverts with `NotDelegated` so a\n///      user can never be tricked into \"revoking\" the contract's own (empty) allowances.\n///      No owner, no proxy, no storage, no arbitrary calls, no token movement.\ncontract BatchAllowanceRevoker {\n    error EmptyBatch();\n    error BatchTooLarge();\n    error ZeroToken();\n    error ZeroSpender();\n    error ApprovalFailed(address token, address spender);\n    error NotDelegated();\n    error NotSelf();\n    error NoEther();\n\n    /// @notice Hard cap on revocations per call (gas-exhaustion bound).\n    uint256 public constant MAX_BATCH = 100;\n\n    /// @notice Address of the standalone deployment. Inside a 7702 delegation\n    ///         `address(this)` is the user's EOA and therefore differs from SELF.\n    address public immutable SELF;\n\n    struct Revocation {\n        address token;\n        address spender;\n    }\n\n    event Revoked(address indexed account, address indexed token, address indexed spender);\n\n    constructor() {\n        SELF = address(this);\n    }\n\n    /// @notice Set allowance(account, spender) to zero for every (token, spender) pair.\n    /// @dev Only callable by the delegated account itself (msg.sender == address(this)),\n    ///      which in a 7702 context means the EOA signed the transaction. This blocks\n    ///      third parties from griefing a delegated account by zeroing its approvals.\n    function revokeMany(Revocation[] calldata revocations) external {\n        if (address(this) == SELF) revert NotDelegated();\n        if (msg.sender != address(this)) revert NotSelf();\n\n        uint256 length = revocations.length;\n        if (length == 0) revert EmptyBatch();\n        if (length > MAX_BATCH) revert BatchTooLarge();\n\n        for (uint256 i = 0; i < length;) {\n            address token = revocations[i].token;\n            address spender = revocations[i].spender;\n            if (token == address(0)) revert ZeroToken();\n            if (spender == address(0)) revert ZeroSpender();\n\n            _approveZero(token, spender);\n            emit Revoked(address(this), token, spender);\n\n            unchecked {\n                ++i;\n            }\n        }\n    }\n\n    /// @dev Equivalent to OpenZeppelin SafeERC20.forceApprove(token, spender, 0):\n    ///      tolerates tokens that return nothing (USDT-style), requires `true` when a\n    ///      boolean is returned, and reverts on call failure or non-contract targets.\n    ///      The amount is a hard-coded literal 0 — there is no code path that can\n    ///      encode any other value.\n    function _approveZero(address token, address spender) private {\n        if (token.code.length == 0) revert ApprovalFailed(token, spender);\n        (bool ok, bytes memory ret) =\n            token.call(abi.encodeWithSelector(0x095ea7b3, spender, uint256(0)));\n        if (!ok || (ret.length != 0 && !(ret.length >= 32 && abi.decode(ret, (bool))))) {\n            revert ApprovalFailed(token, spender);\n        }\n    }\n\n    /// @dev Standalone deployment refuses ETH (it can never move it). A 7702-delegated\n    ///      EOA keeps receiving plain ETH transfers as normal.\n    receive() external payable {\n        if (address(this) == SELF) revert NoEther();\n    }\n\n    fallback() external payable {\n        revert NoEther();\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 1000000
+    },
+    "evmVersion": "paris",
+    "metadata": {
+      "useLiteralContent": false,
+      "bytecodeHash": "none",
+      "appendCBOR": false
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "metadata"
+        ]
+      }
+    }
+  }
+}
