@@ -1,0 +1,59 @@
+# Move this file to .github/workflows/ci.yml
+# (it was committed here because the Bankr GitHub connector token lacks the `workflow` scope).
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Install forge-std (pinned v1.9.6)
+        run: |
+          mkdir -p lib
+          curl -sL https://codeload.github.com/foundry-rs/forge-std/tar.gz/refs/tags/v1.9.6 | tar -xz -C lib
+          mv lib/forge-std-1.9.6 lib/forge-std
+
+      - run: forge fmt --check
+      - run: forge build --sizes
+      - run: forge test -vvv
+      - run: forge snapshot --check --match-test '^test_'
+
+      - name: Reproducible initcode hash
+        run: |
+          forge build --silent
+          HASH=$(forge inspect src/BatchAllowanceRevoker.sol:BatchAllowanceRevoker bytecode | tr -d '\n' | cast keccak)
+          echo "initcode keccak256: $HASH"
+          test "$HASH" = "0x024958b0d57ad819ddc2307b76126d0b38a73fcb87753fd92ade680c72ac1d42"
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install forge-std (pinned v1.9.6)
+        run: |
+          mkdir -p lib
+          curl -sL https://codeload.github.com/foundry-rs/forge-std/tar.gz/refs/tags/v1.9.6 | tar -xz -C lib
+          mv lib/forge-std-1.9.6 lib/forge-std
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install slither-analyzer==0.11.3
+      - name: Slither (fails on high severity; the 3 known findings are medium/low and triaged in README)
+        run: slither . --foundry-compile-all --filter-paths 'lib|test' --exclude-informational --exclude-optimization --fail-high
+      - name: Semgrep
+        run: |
+          pip install semgrep
+          semgrep --config p/smart-contracts src/ --error
