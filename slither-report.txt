@@ -1,0 +1,21 @@
+INFO:Detectors:
+Contract locking ether found:
+	Contract BatchAllowanceRevoker (src/BatchAllowanceRevoker.sol#11-89) has payable functions:
+	 - BatchAllowanceRevoker.receive() (src/BatchAllowanceRevoker.sol#82-84)
+	 - BatchAllowanceRevoker.fallback() (src/BatchAllowanceRevoker.sol#86-88)
+	But does not have a function to withdraw the ether
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#contracts-that-lock-ether
+INFO:Detectors:
+BatchAllowanceRevoker._approveZero(address,address) (src/BatchAllowanceRevoker.sol#71-78) has external calls inside a loop: (ok,ret) = token.call(abi.encodeWithSelector(0x095ea7b3,spender,uint256(0))) (src/BatchAllowanceRevoker.sol#73-74)
+	Calls stack containing the loop:
+		BatchAllowanceRevoker.revokeMany(BatchAllowanceRevoker.Revocation[])
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation/#calls-inside-a-loop
+INFO:Detectors:
+Reentrancy in BatchAllowanceRevoker.revokeMany(BatchAllowanceRevoker.Revocation[]) (src/BatchAllowanceRevoker.sol#43-64):
+	External calls:
+	- _approveZero(token,spender) (src/BatchAllowanceRevoker.sol#57)
+		- (ok,ret) = token.call(abi.encodeWithSelector(0x095ea7b3,spender,uint256(0))) (src/BatchAllowanceRevoker.sol#73-74)
+	Event emitted after the call(s):
+	- Revoked(address(this),token,spender) (src/BatchAllowanceRevoker.sol#58)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-3
+INFO:Slither:. analyzed (34 contracts with 75 detectors), 3 result(s) found
